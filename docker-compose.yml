@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --save '' ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  authd:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      PORT: ":8080"
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL}
+      COOKIE_NAME: session_id
+      COOKIE_DOMAIN: ""
+      COOKIE_SECURE: "true"
+      COOKIE_SAMESITE: Lax
+      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL-}
+      LOCKOUT_REDIS_URL: ${LOCKOUT_REDIS_URL-}
+      AUTH_EMAIL_VERIFICATION_INTERNAL_TOKEN: ${AUTH_EMAIL_VERIFICATION_INTERNAL_TOKEN:-}
+      AUTH_ENABLE_INTERNAL_EMAIL_ISSUE: ${AUTH_ENABLE_INTERNAL_EMAIL_ISSUE:-false}
+      AUTH_METRICS_TOKEN: ${AUTH_METRICS_TOKEN:-}
+      EMAIL_OUTBOX_DIR: ${EMAIL_OUTBOX_DIR:-/tmp/auth-outbox}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-true}
+      EMAIL_VERIFICATION_URL_TEMPLATE: ${EMAIL_VERIFICATION_URL_TEMPLATE:-}
+      PASSWORD_RESET_URL_TEMPLATE: ${PASSWORD_RESET_URL_TEMPLATE:-}
+    entrypoint: ["/bin/sh", "-c", "if [ -z \"$RATE_LIMIT_REDIS_URL\" ]; then if [ -n \"$REDIS_PASSWORD\" ]; then export RATE_LIMIT_REDIS_URL=\"redis://:${REDIS_PASSWORD}@redis:6379\"; else export RATE_LIMIT_REDIS_URL=\"redis://redis:6379\"; fi; fi; if [ -z \"$LOCKOUT_REDIS_URL\" ]; then if [ -n \"$REDIS_PASSWORD\" ]; then export LOCKOUT_REDIS_URL=\"redis://:${REDIS_PASSWORD}@redis:6379\"; else export LOCKOUT_REDIS_URL=\"redis://redis:6379\"; fi; fi; exec /app/authd"]
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata: {}
